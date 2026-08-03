@@ -1,0 +1,7 @@
+﻿#pragma once
+
+#include <string_view>
+
+namespace config {
+    inline constexpr std::string_view SEVEN_ZIP_PATH = "@SEVEN_ZIP_EXECUTABLE@";
+}

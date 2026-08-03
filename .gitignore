@@ -1,0 +1,15 @@
+.DS_Store
+
+Thumbs.db
+
+.vs/
+
+.idea/
+
+*.user
+
+*.suo
+
+result
+files
+cmake-build-debug
