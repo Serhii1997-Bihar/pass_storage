@@ -1,5 +1,6 @@
 ﻿#include "pass-storage/services/auth.hpp"
 #include "pass-storage/services/otp.hpp"
+#include "pass-storage/crypto/hashing.hpp"
 #include <random>
 #include <fmt/core.h>
 #include <fmt/ostream.h>
@@ -19,12 +20,17 @@ bool Auth::authenticate_email(const std::string& email) const {
 
 bool Auth::authenticate_password(const std::string& email, const std::string& user_password) const {
     pqxx::work tx(*db_);
-    const pqxx::result result = tx.exec_params("SELECT password FROM users WHERE email = $1", email);
+
+    const pqxx::result result = tx.exec_params("SELECT password_hash, salt FROM users WHERE email = $1", email);
     tx.commit();
 
     if (!result.empty()) {
-        const std::string db_password = result[0][0].as<std::string>();
-        return db_password == user_password;
+        const std::string password_hash = result[0][0].as<std::string>();
+
+        const std::string salt = result[0][1].as<std::string>();
+        bool input_hash = Hashing::verify_data(user_password, password_hash, salt);
+
+        return input_hash;
     }
 
     return false;
@@ -43,18 +49,18 @@ bool Auth::authenticate_otp(int user_id, const std::string& user_otp) const {
     return false;
 }
 
-std::pair<std::string, std::string> Auth::get_question(int user_id) const {
+std::tuple<std::string, std::string, std::string> Auth::get_question(int user_id) const {
     pqxx::work tx(*db_);
     const pqxx::result result = tx.exec_params("SELECT questions::text FROM users WHERE id = $1", user_id);
     tx.commit();
 
     if (result.empty()) {
-        return {"", ""};
+        return {"", "", ""};
     }
 
     nlohmann::json questions = nlohmann::json::parse(result[0][0].as<std::string>());
     if (questions.empty()) {
-        return {"", ""};
+        return {"", "", ""};
     }
 
     std::random_device rd;
@@ -64,7 +70,12 @@ std::pair<std::string, std::string> Auth::get_question(int user_id) const {
     auto it = questions.begin();
     std::advance(it, dist(gen));
 
-    return {it.key(), it.value().get<std::string>()};
+    const auto& data = it.value();
+    return {
+        it.key(),
+        data["hash"].get<std::string>(),
+        data["salt"].get<std::string>()
+    };
 }
 
 std::optional<int> Auth::get_user_id(const std::string& email) const {
@@ -110,7 +121,7 @@ bool Auth::advanced_authentication(int user_id) const {
         return false;
     }
 
-    auto [question, expected_answer] = get_question(user_id);
+    auto [question, expected_hash, salt] = get_question(user_id);
     if (question.empty()) {
         fmt::println("No security questions found for this user!");
         return false;
@@ -120,7 +131,7 @@ bool Auth::advanced_authentication(int user_id) const {
     std::string answer;
     std::getline(std::cin >> std::ws, answer);
 
-    if (answer != expected_answer) {
+    if (!Hashing::verify_data(answer, expected_hash, salt)) {
         fmt::println("Your answer is not correct!");
         return false;
     }

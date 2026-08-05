@@ -2,27 +2,45 @@
 #include <fstream>
 #include <sstream>
 #include <unordered_map>
+#include <algorithm>
 
 namespace {
     std::unordered_map<std::string, std::string> env_cache;
+
+    std::string trim(const std::string& str) {
+        size_t first = str.find_first_not_of(" \t\r\n");
+        if (first == std::string::npos) {
+            return "";
+        }
+        size_t last = str.find_last_not_of(" \t\r\n");
+        return str.substr(first, (last - first + 1));
+    }
 }
 
 void load_env(const std::string& path) {
     std::ifstream file(path);
     if (!file.is_open()) {
-        return;
+        file.open("../.env");
+        if (!file.is_open()) {
+            return;
+        }
     }
 
     std::string line;
     while (std::getline(file, line)) {
-        if (line.empty() || line[0] == '#') {
+        std::string trimmed_line = trim(line);
+        if (trimmed_line.empty() || trimmed_line[0] == '#') {
             continue;
         }
 
-        std::istringstream line_stream(line);
-        std::string key, value;
-        if (std::getline(line_stream, key, '=') && std::getline(line_stream, value)) {
-            env_cache[key] = value;
+        size_t delimiter_pos = trimmed_line.find('=');
+        if (delimiter_pos != std::string::npos) {
+            std::string key = trim(trimmed_line.substr(0, delimiter_pos));
+            std::string value = trim(trimmed_line.substr(delimiter_pos + 1));
+
+            if (!key.empty()) {
+                env_cache[key] = value;
+            }
         }
     }
 }

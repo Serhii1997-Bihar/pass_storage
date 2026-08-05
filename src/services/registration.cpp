@@ -1,4 +1,5 @@
 ﻿#include "pass-storage/services/registration.hpp"
+#include "pass-storage/crypto/hashing.hpp"
 #include "pass-storage/models/user.hpp"
 #include <fmt/core.h>
 #include <fmt/ostream.h>
@@ -9,13 +10,21 @@
 Registration::Registration(std::shared_ptr<pqxx::connection> db_connection)
     : db_(std::move(db_connection)) {}
 
-std::optional<int> Registration::save_user(std::string email, std::string password, std::string username, const std::string& questions_json_str, std::string phone) const {
+std::optional<int> Registration::save_user(
+    std::string_view email,
+    std::string_view password,
+    std::string_view username,
+    std::string_view questions_json_str,
+    std::string_view phone
+) const {
     pqxx::work tx(*db_);
 
+    auto [hashed_password, salt] = Hashing::get_data_and_salt(password);
+
     const pqxx::result result = tx.exec_params(
-        "INSERT INTO users (email, password, username, questions, phone) "
-        "VALUES ($1, $2, $3, $4::jsonb, $5) RETURNING id",
-        email, password, username, questions_json_str, phone
+        "INSERT INTO users (email, password_hash, salt, username, questions, phone) "
+        "VALUES ($1, $2, $3, $4, $5::jsonb, $6) RETURNING id",
+        email, hashed_password, salt, username, questions_json_str, phone
     );
 
     if (result.empty()) {
@@ -34,7 +43,7 @@ std::optional<int> Registration::save_user(std::string email, std::string passwo
     return user_id;
 }
 
-std::string Registration::adapt_questions() const {
+std::string Registration::adapt_questions() {
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
     nlohmann::json questions_json = nlohmann::json::object();
@@ -54,7 +63,12 @@ std::string Registration::adapt_questions() const {
             continue;
         }
 
-        questions_json[question] = answer;
+        auto [hashed_answer, answer_salt] = Hashing::get_data_and_salt(answer);
+
+        questions_json[question] = {
+            {"hash", hashed_answer},
+            {"salt", answer_salt}
+        };
     }
 
     return questions_json.dump();

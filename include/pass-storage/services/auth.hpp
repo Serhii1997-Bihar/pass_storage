@@ -20,5 +20,5 @@ private:
     bool authenticate_answer(int user_id, const std::string& user_answer) const;
 
     std::optional<int> get_user_id(const std::string& email) const;
-    std::pair<std::string, std::string> get_question(int user_id) const;
+    std::tuple<std::string, std::string, std::string> get_question(int user_id) const;
 };

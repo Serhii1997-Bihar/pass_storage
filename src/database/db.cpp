@@ -11,7 +11,8 @@ static void create_tables_if_not_exists(const std::shared_ptr<pqxx::connection>&
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
             email VARCHAR(255) UNIQUE NOT NULL,
-            password VARCHAR(255) NOT NULL,
+            password_hash VARCHAR(255) NOT NULL,
+            salt VARCHAR(50) NOT NULL,
             otp_code VARCHAR(6),
             questions JSONB NOT NULL,
             username VARCHAR(255) NOT NULL,
@@ -48,10 +49,10 @@ DB_Manager::DB_Manager() {
     try {
         load_env();
 
-        std::string host = get_env_var("DB_HOST", "localhost");
-        std::string port = get_env_var("DB_PORT", "5432");
+        std::string host = get_env_var("DB_HOST", "");
+        std::string port = get_env_var("DB_PORT", "");
         std::string dbname = get_env_var("DB_NAME", "");
-        std::string user = get_env_var("DB_USER", "postgres");
+        std::string user = get_env_var("DB_USER", "");
         std::string password = get_env_var("DB_PASSWORD", "");
 
         std::string conn_str = fmt::format("host={} port={} dbname={} user={} password={}", host, port, dbname, user, password);
