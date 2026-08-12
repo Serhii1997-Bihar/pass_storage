@@ -42,20 +42,18 @@ bool Data_Manager::append_folder(int user_id, const Data_Path& path) {
     try {
         pqxx::work tx(*db_);
 
-        tx.exec_params(
+        tx.exec(
             "INSERT INTO data (user_id, data) "
             "VALUES ($1, '{\"text\": {}, \"files\": {}, \"documents\": {}}'::jsonb) "
             "ON CONFLICT (user_id) DO NOTHING",
-            user_id
+            pqxx::params{user_id}
         );
 
-        const pqxx::result result = tx.exec_params(
+        const pqxx::result result = tx.exec(
             "UPDATE data "
             "SET data = jsonb_set(data, array[$2, $3], '{}'::jsonb, true) "
             "WHERE user_id = $1 AND NOT (data->$2 ? $3)",
-            user_id,
-            path.type_folder,
-            path.name_folder
+            pqxx::params{user_id, path.type_folder, path.name_folder}
         );
 
         tx.commit();
@@ -72,13 +70,10 @@ bool Data_Manager::append_data(int user_id, const Data_Path& data_struct) {
 
         const auto new_data = nlohmann::json::object({ {data_struct.key, data_struct.value} });
 
-        const auto result = tx.exec_params(
+        const auto result = tx.exec(
             "UPDATE data SET data = jsonb_set(data, array[$2, $3], "
             "COALESCE(data->$2->$3, '[]'::jsonb) || $4::jsonb, true) WHERE user_id = $1",
-            user_id,
-            data_struct.type_folder,
-            data_struct.name_folder,
-            new_data.dump()
+            pqxx::params{user_id, data_struct.type_folder, data_struct.name_folder, new_data.dump()}
         );
 
         tx.commit();
@@ -94,10 +89,9 @@ std::string Data_Manager::get_data(int user_id, const Data_Path& path) {
         pqxx::read_transaction tx(*db_);
         const std::vector<std::string> json_path = build_json_path(path);
 
-        const pqxx::result result = tx.exec_params(
+        const pqxx::result result = tx.exec(
             "SELECT (data #>> $2) FROM data WHERE user_id = $1",
-            user_id,
-            json_path
+            pqxx::params{user_id, json_path}
         );
 
         if (!result.empty() && !result[0][0].is_null()) {
@@ -115,10 +109,9 @@ bool Data_Manager::delete_data(int user_id, const Data_Path& path) {
         pqxx::work tx(*db_);
         const std::vector<std::string> json_path = build_json_path(path);
 
-        const pqxx::result result = tx.exec_params(
+        const pqxx::result result = tx.exec(
             "UPDATE data SET data = data #- $2 WHERE user_id = $1 AND data #> $2 IS NOT NULL",
-            user_id,
-            json_path
+            pqxx::params{user_id, json_path}
         );
         tx.commit();
 
@@ -136,12 +129,10 @@ bool Data_Manager::update_data(int user_id, const Data_Path& path, const std::st
 
         pqxx::work tx(*db_);
 
-        const pqxx::result result = tx.exec_params(
+        const pqxx::result result = tx.exec(
             "UPDATE data SET data = jsonb_set(data, $2, $3::jsonb, false) "
             "WHERE user_id = $1 AND data #> $2 IS NOT NULL",
-            user_id,
-            json_path,
-            nlohmann::json(new_value).dump()
+            pqxx::params{user_id, json_path, nlohmann::json(new_value).dump()}
         );
         tx.commit();
 
@@ -176,21 +167,18 @@ bool Data_Manager::append_file(int user_id, const Data_Path& data_struct, const 
     try {
         pqxx::work tx(*db_);
 
-        tx.exec_params(
+        const auto* data_ptr = reinterpret_cast<const std::byte*>(buffer.data());
+
+        tx.exec(
             "INSERT INTO file_storage (file_id, user_id, content) VALUES ($1::uuid, $2, $3)",
-            file_id,
-            user_id,
-            pqxx::bytes(reinterpret_cast<const std::byte*>(buffer.data()), buffer.size())
+            pqxx::params{file_id, user_id, pqxx::bytes(data_ptr, data_ptr + buffer.size())}
         );
 
         const auto new_file_entry = nlohmann::json::object({ {data_struct.key, file_id} });
-        const auto result = tx.exec_params(
+        const auto result = tx.exec(
             "UPDATE data SET data = jsonb_set(data, array[$2, $3], "
             "COALESCE(data->$2->$3, '{}'::jsonb) || $4::jsonb, true) WHERE user_id = $1",
-            user_id,
-            data_struct.type_folder,
-            data_struct.name_folder,
-            new_file_entry.dump()
+            pqxx::params{user_id, data_struct.type_folder, data_struct.name_folder, new_file_entry.dump()}
         );
 
         tx.commit();

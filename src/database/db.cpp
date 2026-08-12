@@ -3,6 +3,7 @@
 #include <iostream>
 #include <string>
 #include <fmt/core.h>
+#include <format>
 
 static void create_tables_if_not_exists(const std::shared_ptr<pqxx::connection>& connection) {
     pqxx::work tx(*connection);
@@ -55,7 +56,7 @@ DB_Manager::DB_Manager() {
         std::string user = get_env_var("DB_USER", "");
         std::string password = get_env_var("DB_PASSWORD", "");
 
-        std::string conn_str = fmt::format("host={} port={} dbname={} user={} password={}", host, port, dbname, user, password);
+        std::string conn_str = std::format("host={} port={} dbname={} user={} password={}", host, port, dbname, user, password);
         connection_ = std::make_shared<pqxx::connection>(conn_str);
 
         if (connection_->is_open()) {

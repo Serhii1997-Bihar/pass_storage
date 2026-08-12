@@ -12,7 +12,7 @@ Auth::Auth(std::shared_ptr<pqxx::connection> db_connection)
 
 bool Auth::authenticate_email(const std::string& email) const {
     pqxx::work tx(*db_);
-    const pqxx::result result = tx.exec_params("SELECT 1 FROM users WHERE email = $1", email);
+    const pqxx::result result = tx.exec("SELECT 1 FROM users WHERE email = $1", pqxx::params{email});
     tx.commit();
 
     return !result.empty();
@@ -21,7 +21,7 @@ bool Auth::authenticate_email(const std::string& email) const {
 bool Auth::authenticate_password(const std::string& email, const std::string& user_password) const {
     pqxx::work tx(*db_);
 
-    const pqxx::result result = tx.exec_params("SELECT password_hash, salt FROM users WHERE email = $1", email);
+    const pqxx::result result = tx.exec("SELECT password_hash, salt FROM users WHERE email = $1", pqxx::params{email});
     tx.commit();
 
     if (!result.empty()) {
@@ -38,7 +38,7 @@ bool Auth::authenticate_password(const std::string& email, const std::string& us
 
 bool Auth::authenticate_otp(int user_id, const std::string& user_otp) const {
     pqxx::work tx(*db_);
-    const pqxx::result result = tx.exec_params("SELECT otp_code FROM users WHERE id = $1", user_id);
+    const pqxx::result result = tx.exec("SELECT otp_code FROM users WHERE id = $1", pqxx::params{user_id});
     tx.commit();
 
     if (!result.empty()) {
@@ -51,7 +51,7 @@ bool Auth::authenticate_otp(int user_id, const std::string& user_otp) const {
 
 std::tuple<std::string, std::string, std::string> Auth::get_question(int user_id) const {
     pqxx::work tx(*db_);
-    const pqxx::result result = tx.exec_params("SELECT questions::text FROM users WHERE id = $1", user_id);
+    const pqxx::result result = tx.exec("SELECT questions::text FROM users WHERE id = $1", pqxx::params{user_id});
     tx.commit();
 
     if (result.empty()) {
@@ -80,7 +80,7 @@ std::tuple<std::string, std::string, std::string> Auth::get_question(int user_id
 
 std::optional<int> Auth::get_user_id(const std::string& email) const {
     pqxx::work tx(*db_);
-    const pqxx::result result = tx.exec_params("SELECT id FROM users WHERE email = $1", email);
+    const pqxx::result result = tx.exec("SELECT id FROM users WHERE email = $1", pqxx::params{email});
     tx.commit();
 
     if (!result.empty()) {

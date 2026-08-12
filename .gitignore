@@ -1,6 +1,7 @@
 .DS_Store
 
 Thumbs.db
+vcpkg_installed/
 
 .vs/
 
@@ -14,3 +15,4 @@ result
 files
 cmake-build-debug
 .env
+vcpkg_installed

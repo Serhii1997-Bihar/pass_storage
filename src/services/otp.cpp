@@ -15,7 +15,7 @@ bool Otp_Manager::send_otp(const std::string& user_email, const std::string& otp
         std::string payload;
     };
 
-    auto payload_source = [](char* ptr, size_t size, size_t nmemb, void* userp) -> size_t const {
+    auto payload_source = [](char* ptr, size_t size, size_t nmemb, void* userp) -> size_t {
         auto* upload_ctx = static_cast<Upload_Status*>(userp);
         size_t room = size * nmemb;
 
@@ -23,7 +23,7 @@ bool Otp_Manager::send_otp(const std::string& user_email, const std::string& otp
             return 0;
         }
 
-        size_t len = std::min(room, upload_ctx->payload.size() - upload_ctx->bytes_read);
+        size_t len = (std::min)(room, upload_ctx->payload.size() - upload_ctx->bytes_read);
         std::memcpy(ptr, upload_ctx->payload.data() + upload_ctx->bytes_read, len);
         upload_ctx->bytes_read += len;
 
@@ -86,9 +86,9 @@ bool Otp_Manager::update_otp(int user_id) {
     pqxx::work tx(*db_);
     std::string new_otp = generate_otp();
 
-    pqxx::result result = tx.exec_params(
+    pqxx::result result = tx.exec(
         "UPDATE users SET otp_code = $1 WHERE id = $2 RETURNING email",
-        new_otp, user_id
+        pqxx::params{new_otp, user_id}
     );
     tx.commit();
 

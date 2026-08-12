@@ -1,0 +1,13 @@
+﻿{
+  "name": "pass-storage",
+  "version": "1.0.0",
+  "dependencies": [
+    "libpqxx",
+    "fmt",
+    "botan",
+    "nlohmann-json",
+    "curl",
+    "libpq",
+    "openssl"
+  ]
+}

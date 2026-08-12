@@ -1,68 +1,20 @@
 ﻿cmake_minimum_required(VERSION 3.28)
+set(VCPKG_MANIFEST_INSTALL_OPTIONS "--no-binarycaching")
 project(pass_storage)
 
 set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_MAP_IMPORTED_CONFIG_DEBUG Release)
 
-include(FetchContent)
-
-set(BUILD_CURL_EXE OFF CACHE BOOL "" FORCE)
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
-
-set(CURL_USE_SCHANNEL ON CACHE BOOL "" FORCE)
-set(CURL_USE_OPENSSL OFF CACHE BOOL "" FORCE)
-
-FetchContent_Declare(
-        libpqxx
-        GIT_REPOSITORY https://github.com/jtv/libpqxx.git
-        GIT_TAG 7.10.0
-        SYSTEM
-        EXCLUDE_FROM_ALL
-)
-
-FetchContent_Declare(
-        fmt
-        GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-        GIT_TAG 10.2.1
-        SYSTEM
-        EXCLUDE_FROM_ALL
-)
-
-FetchContent_Declare(
-        json
-        URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
-        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
-        SYSTEM
-        EXCLUDE_FROM_ALL
-)
-
-FetchContent_Declare(
-        curl
-        GIT_REPOSITORY https://github.com/curl/curl.git
-        GIT_TAG curl-8_6_0
-        SYSTEM
-        EXCLUDE_FROM_ALL
-)
-
-FetchContent_MakeAvailable(
-        libpqxx
-        fmt
-        json
-        curl
-)
-
+find_package(libpqxx CONFIG REQUIRED)
+find_package(fmt CONFIG REQUIRED)
+find_package(Botan CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
+find_package(CURL CONFIG REQUIRED)
 find_package(PostgreSQL REQUIRED)
-
-get_filename_component(POSTGRES_LIB_DIR "${PostgreSQL_LIBRARY}" DIRECTORY)
-set(POSTGRES_BIN_DIR "${POSTGRES_LIB_DIR}/../bin")
-
-if (NOT OPENSSL_ROOT_DIR)
-
-    set(OPENSSL_ROOT_DIR "${POSTGRES_LIB_DIR}/..")
-
-endif()
-
 find_package(OpenSSL REQUIRED)
+find_package(Threads REQUIRED)
 
 find_program(
         SEVEN_ZIP_EXECUTABLE
@@ -73,9 +25,7 @@ find_program(
 )
 
 if (NOT SEVEN_ZIP_EXECUTABLE)
-
     set(SEVEN_ZIP_EXECUTABLE "7z")
-
 endif()
 
 configure_file(
@@ -91,6 +41,7 @@ add_executable(
         src/helpers/text.cpp
         src/services/registration.cpp
         src/crypto/hashing.cpp
+        src/crypto/encryption.cpp
         include/pass-storage/models/user.hpp
         include/pass-storage/models/data.hpp
         src/services/data.cpp
@@ -101,21 +52,27 @@ add_executable(
         src/helpers/uuid.cpp
 )
 
-get_filename_component(POSTGRES_LIB_DIR "${PostgreSQL_LIBRARY}" DIRECTORY)
-set(POSTGRES_BIN_DIR "${POSTGRES_LIB_DIR}/../bin")
-
 target_link_libraries(
         pass_storage
         PRIVATE
         OpenSSL::Crypto
-        pqxx
+        OpenSSL::SSL
+        libpqxx::pqxx
         fmt::fmt
         nlohmann_json::nlohmann_json
-        "${POSTGRES_LIB_DIR}/libpq.lib"
-        libcurl
+        ${PostgreSQL_LIBRARIES}
+        CURL::libcurl
         ws2_32
         secur32
+        crypt32
+        wldap32
+        Botan::Botan
+        Threads::Threads
 )
+
+if (MSVC AND MSVC_VERSION GREATER_EQUAL 1950)
+    target_link_options(pass_storage PRIVATE /FORCE:MULTIPLE)
+endif()
 
 target_include_directories(
         pass_storage
@@ -124,26 +81,3 @@ target_include_directories(
         "${PostgreSQL_INCLUDE_DIRS}"
         "${CMAKE_CURRENT_BINARY_DIR}/generated"
 )
-
-add_custom_command(
-        TARGET pass_storage POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${POSTGRES_BIN_DIR}/libpq.dll"
-        "${POSTGRES_BIN_DIR}/libcrypto-3-x64.dll"
-        "${POSTGRES_BIN_DIR}/libssl-3-x64.dll"
-        "${POSTGRES_BIN_DIR}/libintl-9.dll"
-        "${POSTGRES_BIN_DIR}/libiconv-2.dll"
-        $<TARGET_FILE_DIR:pass_storage>
-)
-
-if (MINGW)
-    get_filename_component(MINGW_BIN_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
-    add_custom_command(
-            TARGET pass_storage POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${MINGW_BIN_DIR}/libwinpthread-1.dll"
-            "${MINGW_BIN_DIR}/libstdc++-6.dll"
-            "${MINGW_BIN_DIR}/libgcc_s_seh-1.dll"
-            $<TARGET_FILE_DIR:pass_storage>
-    )
-endif()

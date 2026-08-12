@@ -50,17 +50,18 @@ The project follows a service-oriented architecture using standard smart pointer
 
 ## 📂 File Overview & Capabilities
 
-| File | Description & Key Responsibilities |
-| :--- | :--- |
-| **`db.cpp`** | **Database Manager (`DB_Manager`)**: Handles PostgreSQL connectivity via `libpqxx`. Loads environment variables and executes automatic schema migrations for `users`, `data`, and `file_storage` tables. |
-| **`load_env.cpp` / `uuid.cpp`** | **Helpers**: `load_env` parses the `.env` configuration file into an in-memory cache. `uuid` generates standard `UUID v4` strings using `std::mt19937` and `std::format`. |
-| **`auth.cpp`** | **Authentication Service (`Auth`)**: Handles basic authentication (*Email* + *Password*) and advanced authentication. Randomly picks a security question from the user's `JSONB` questions array and validates the answer. |
-| **`otp.cpp`** | **OTP Manager (`Otp_Manager`)**: Generates 6-digit random verification codes and sends them to the user's email address over SMTP with TLS using `libcurl`. |
-| **`registration.cpp`** | **Registration Service (`Registration`)**: Interactively collects user profile data, prompts for 10 security questions/answers, creates the user record, and initializes the default `JSONB` tree. |
-| **`data.cpp`** | **Data Manager (`Data_Manager`)**: Performs CRUD operations on the `JSONB` tree in PostgreSQL (`jsonb_set`, `#>`, `#-`). Handles reading binary files from disk into `file_storage` (`BYTEA`) and exporting them back out. |
-| **`saver.cpp`** | **Export Manager (`Save_Manager`)**: Dumps requested files/data into a temporary directory, compresses them into an encrypted `.7z` archive with hidden headers (`-mhe=on`) via **7-Zip**, and returns the random archive password. |
-| **`user.cpp`** | **User Profile Manager (`User_Manager`)**: Provides functions to retrieve and update user account details (such as *email* or *password*) in the database. |
-| **`main.cpp`** | **Entry Point (CLI Orchestrator)**: Ties all services together into an interactive command-line interface, managing the authentication loop and user menu routing. |
+| File                             | Description & Key Responsibilities                                                                                                                                                                                                  |
+|:---------------------------------|:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **`db.cpp`**                     | **Database Manager (`DB_Manager`)**: Handles PostgreSQL connectivity via `libpqxx`. Loads environment variables and executes automatic schema migrations for `users`, `data`, and `file_storage` tables.                            |
+| **`load_env.cpp` / `uuid.cpp`**  | **Helpers**: `load_env` parses the `.env` configuration file into an in-memory cache. `uuid` generates standard `UUID v4` strings using `std::mt19937` and `std::format`.                                                           |
+| **`auth.cpp`**                   | **Authentication Service (`Auth`)**: Handles basic authentication (*Email* + *Password*) and advanced authentication. Randomly picks a security question from the user's `JSONB` questions array and validates the answer.          |
+| **`otp.cpp`**                    | **OTP Manager (`Otp_Manager`)**: Generates 6-digit random verification codes and sends them to the user's email address over SMTP with TLS using `libcurl`.                                                                         |
+| **`registration.cpp`**           | **Registration Service (`Registration`)**: Interactively collects user profile data, prompts for 10 security questions/answers, creates the user record, and initializes the default `JSONB` tree.                                  |
+| **`data.cpp`**                   | **Data Manager (`Data_Manager`)**: Performs CRUD operations on the `JSONB` tree in PostgreSQL (`jsonb_set`, `#>`, `#-`). Handles reading binary files from disk into `file_storage` (`BYTEA`) and exporting them back out.          |
+| **`saver.cpp`**                  | **Export Manager (`Save_Manager`)**: Dumps requested files/data into a temporary directory, compresses them into an encrypted `.7z` archive with hidden headers (`-mhe=on`) via **7-Zip**, and returns the random archive password. |
+| **`user.cpp`**                   | **User Profile Manager (`User_Manager`)**: Provides functions to retrieve and update user account details (such as *email* or *password*) in the database.                                                                          |
+| **`main.cpp`**                   | **Entry Point (CLI Orchestrator)**: Ties all services together into an interactive command-line interface, managing the authentication loop and user menu routing.                                                                  |
+| **`hashing.cpp / cryption.cpp`** | **Crypto**: These files are the main helpers to hash and crypt data to provide security of user.                                                                                                                                    |
 
 ---
 

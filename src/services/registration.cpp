@@ -21,10 +21,10 @@ std::optional<int> Registration::save_user(
 
     auto [hashed_password, salt] = Hashing::get_data_and_salt(password);
 
-    const pqxx::result result = tx.exec_params(
+    const pqxx::result result = tx.exec(
         "INSERT INTO users (email, password_hash, salt, username, questions, phone) "
         "VALUES ($1, $2, $3, $4, $5::jsonb, $6) RETURNING id",
-        email, hashed_password, salt, username, questions_json_str, phone
+        pqxx::params{email, hashed_password, salt, username, questions_json_str, phone}
     );
 
     if (result.empty()) {
@@ -33,10 +33,10 @@ std::optional<int> Registration::save_user(
 
     int user_id = result[0]["id"].as<int>();
 
-    tx.exec_params(
+    tx.exec(
         "INSERT INTO data (user_id, data) "
         "VALUES ($1, '{\"text\": {}, \"files\": {}, \"documents\": {}}'::jsonb)",
-        user_id
+        pqxx::params{user_id}
     );
 
     tx.commit();

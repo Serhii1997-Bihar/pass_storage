@@ -80,10 +80,9 @@ bool Save_Manager::get_file(int user_id, const std::string& file_id, const std::
     try {
         pqxx::read_transaction tx(*db_);
 
-        const auto res = tx.exec_params(
+        const auto res = tx.exec(
             "SELECT content FROM file_storage WHERE file_id = $1::uuid AND user_id = $2",
-            file_id,
-            user_id
+            pqxx::params{file_id, user_id}
         );
 
         if (res.empty()) return false;
