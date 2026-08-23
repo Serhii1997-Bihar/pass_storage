@@ -3,6 +3,7 @@
 #include <string>
 #include <memory>
 #include <vector>
+#include <span>
 #include <pqxx/pqxx>
 #include <filesystem>
 
@@ -17,15 +18,14 @@ public:
 
     explicit Data_Manager(std::shared_ptr<pqxx::connection> db_connection);
 
-    bool append_folder(int user_id, const Data_Path& path);
-    bool append_data(int user_id, const Data_Path& entry);
-    std::string get_data(int user_id, const Data_Path& path);
-    bool delete_data(int user_id, const Data_Path& path);
-    bool update_data(int user_id, const Data_Path& path, const std::string& data);
-    bool append_file(int user_id, const Data_Path& data_struct, const std::string& raw_file_path);
+    bool append_folder(int user_id, const Data_Path& path) const;
+    bool append_data(int user_id, const Data_Path& entry, std::span<const unsigned char> master_key) const;
+    std::string get_data(int user_id, const Data_Path& path, std::span<const unsigned char> master_key) const;
+    bool delete_data(int user_id, const Data_Path& path) const;
+    bool append_file(int user_id, const Data_Path& data_struct, const std::string& raw_file_path, std::span<const unsigned char> master_key) const ;
     static Data_Path adapt_path(const std::string& path);
 
 private:
     std::shared_ptr<pqxx::connection> db_;
-    static std::vector<std::string> build_json_path(const Data_Path& path);
+    static std::string build_path_context(const Data_Path& path);
 };

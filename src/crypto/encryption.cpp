@@ -25,8 +25,8 @@ std::vector<unsigned char> Encryption::derive_path_key(std::span<const unsigned 
     return std::vector<unsigned char>(key.begin(), key.end());
 }
 
-std::vector<unsigned char> Encryption::encrypt(std::span<const unsigned char> text, std::span<const unsigned char> key, std::string_view path) {
-    auto derived_key = derive_path_key(key, path);
+std::vector<unsigned char> Encryption::encrypt(std::span<const unsigned char> text, std::span<const unsigned char> master_key, std::string_view path) {
+    auto derived_key = derive_path_key(master_key, path);
 
     Botan::System_RNG rng;
     std::vector<uint8_t> iv(IV_SIZE);
@@ -36,11 +36,12 @@ std::vector<unsigned char> Encryption::encrypt(std::span<const unsigned char> te
     if (!enc) throw std::runtime_error("Failed to create AES-256-GCM cipher");
 
     enc->set_key(derived_key.data(), derived_key.size());
-    enc->start(iv.data(), iv.size());
 
     if (!path.empty()) {
         enc->set_associated_data(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(path.data()), path.size()));
     }
+
+    enc->start(iv.data(), iv.size());
 
     Botan::secure_vector<uint8_t> buffer(text.begin(), text.end());
     enc->finish(buffer);
@@ -77,11 +78,12 @@ std::vector<unsigned char> Encryption::decrypt(
     if (!dec) throw std::runtime_error("Failed to create AES-256-GCM cipher");
 
     dec->set_key(derived_key.data(), derived_key.size());
-    dec->start(iv.data(), iv.size());
 
     if (!path_context.empty()) {
         dec->set_associated_data(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(path_context.data()), path_context.size()));
     }
+
+    dec->start(iv.data(), iv.size());
 
     Botan::secure_vector<uint8_t> buffer;
     buffer.reserve(ciphertext.size() + tag.size());

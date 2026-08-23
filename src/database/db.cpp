@@ -2,7 +2,6 @@
 #include "pass-storage/helpers/load_env.hpp"
 #include <iostream>
 #include <string>
-#include <fmt/core.h>
 #include <format>
 
 static void create_tables_if_not_exists(const std::shared_ptr<pqxx::connection>& connection) {
@@ -60,6 +59,7 @@ DB_Manager::DB_Manager() {
         connection_ = std::make_shared<pqxx::connection>(conn_str);
 
         if (connection_->is_open()) {
+            connection_->set_client_encoding("UTF8");
             std::cout << "Successfully connected to the database: " << connection_->dbname() << "\n";
             create_tables_if_not_exists(connection_);
         }

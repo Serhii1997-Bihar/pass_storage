@@ -50,6 +50,8 @@ add_executable(
         src/helpers/load_env.cpp
         src/services/saver.cpp
         src/helpers/uuid.cpp
+        src/crypto/master_key.cpp
+        src/cli/menu_options.cpp
 )
 
 target_link_libraries(

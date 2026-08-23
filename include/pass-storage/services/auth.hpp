@@ -2,12 +2,17 @@
 
 #include <string>
 #include <memory>
+#include <optional>
+#include <tuple>
+#include <cstdint>
 #include <pqxx/pqxx>
+#include <botan/pwdhash.h>
+#include <botan/secmem.h>
 
 class Auth {
 public:
     explicit Auth(std::shared_ptr<pqxx::connection> db_connection);
-    std::pair<std::optional<int>, std::string> basic_authentication() const;
+    std::tuple<std::optional<int>, std::string, Botan::secure_vector<uint8_t>> basic_authentication() const;
     bool advanced_authentication(int user_id) const;
 
 private:
@@ -21,4 +26,5 @@ private:
 
     std::optional<int> get_user_id(const std::string& email) const;
     std::tuple<std::string, std::string, std::string> get_question(int user_id) const;
+    Botan::secure_vector<uint8_t> get_master_key(const std::string& email, const std::string& password) const;
 };

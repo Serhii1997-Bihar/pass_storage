@@ -16,3 +16,4 @@ files
 cmake-build-debug
 .env
 vcpkg_installed
+desktop.ini

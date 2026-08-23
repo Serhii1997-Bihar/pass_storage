@@ -1,12 +1,16 @@
 ﻿#include "pass-storage/services/data.hpp"
+#include "pass-storage/crypto/encryption.hpp"
 #include "pass-storage/helpers/uuid.hpp"
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <vector>
+#include <span>
+#include <format>
 #include <pqxx/pqxx>
 #include <nlohmann/json.hpp>
 #include <fmt/core.h>
+#include <botan/base64.h>
 
 Data_Manager::Data_Manager(std::shared_ptr<pqxx::connection> db_connection)
     : db_(std::move(db_connection)) {}
@@ -30,15 +34,11 @@ Data_Manager::Data_Path Data_Manager::adapt_path(const std::string& path) {
     return result;
 }
 
-std::vector<std::string> Data_Manager::build_json_path(const Data_Path& path) {
-    std::vector<std::string> json_path;
-    if (!path.type_folder.empty()) json_path.push_back(path.type_folder);
-    if (!path.name_folder.empty()) json_path.push_back(path.name_folder);
-    if (!path.key.empty()) json_path.push_back(path.key);
-    return json_path;
+std::string Data_Manager::build_path_context(const Data_Path& path) {
+    return std::format("{}/{}/{}", path.type_folder, path.name_folder, path.key);
 }
 
-bool Data_Manager::append_folder(int user_id, const Data_Path& path) {
+bool Data_Manager::append_folder(int user_id, const Data_Path& path) const {
     try {
         pqxx::work tx(*db_);
 
@@ -55,28 +55,37 @@ bool Data_Manager::append_folder(int user_id, const Data_Path& path) {
             "WHERE user_id = $1 AND NOT (data->$2 ? $3)",
             pqxx::params{user_id, path.type_folder, path.name_folder}
         );
-
         tx.commit();
+
         return result.affected_rows() > 0;
+
     } catch (const std::exception& e) {
         fmt::println(stderr, "Error in append_folder: {}", e.what());
         return false;
     }
 }
 
-bool Data_Manager::append_data(int user_id, const Data_Path& data_struct) {
+bool Data_Manager::append_data(int user_id, const Data_Path& entry, const std::span<const unsigned char> master_key) const {
+    if (entry.type_folder.empty() || entry.name_folder.empty() || entry.key.empty()) return false;
+
     try {
         pqxx::work tx(*db_);
 
-        const auto new_data = nlohmann::json::object({ {data_struct.key, data_struct.value} });
+        const std::string path_context = build_path_context(entry);
+        const std::span<const unsigned char> text_span(reinterpret_cast<const unsigned char*>(entry.value.data()), entry.value.size());
+
+        const auto encrypted_data = Encryption::encrypt(text_span, master_key, path_context);
+        std::string b64_encrypted = Botan::base64_encode(encrypted_data.data(), encrypted_data.size());
+
+        const auto new_data = nlohmann::json::object({ {entry.key, b64_encrypted} });
 
         const auto result = tx.exec(
             "UPDATE data SET data = jsonb_set(data, array[$2, $3], "
-            "COALESCE(data->$2->$3, '[]'::jsonb) || $4::jsonb, true) WHERE user_id = $1",
-            pqxx::params{user_id, data_struct.type_folder, data_struct.name_folder, new_data.dump()}
+            "COALESCE(data->$2->$3, '{}'::jsonb) || $4::jsonb, true) WHERE user_id = $1",
+            pqxx::params{user_id, entry.type_folder, entry.name_folder, new_data.dump()}
         );
-
         tx.commit();
+
         return result.affected_rows() > 0;
     } catch (const std::exception& e) {
         fmt::println(stderr, "Error in append_data: {}", e.what());
@@ -84,18 +93,37 @@ bool Data_Manager::append_data(int user_id, const Data_Path& data_struct) {
     }
 }
 
-std::string Data_Manager::get_data(int user_id, const Data_Path& path) {
+std::string Data_Manager::get_data(int user_id, const Data_Path& path, const std::span<const unsigned char> master_key) const {
     try {
         pqxx::read_transaction tx(*db_);
-        const std::vector<std::string> json_path = build_json_path(path);
+        pqxx::result result;
 
-        const pqxx::result result = tx.exec(
-            "SELECT (data #>> $2) FROM data WHERE user_id = $1",
-            pqxx::params{user_id, json_path}
-        );
+        if (path.key.empty()) {
+            result = tx.exec(
+                "SELECT (data #>> array[$2, $3]) FROM data WHERE user_id = $1",
+                pqxx::params{user_id, path.type_folder, path.name_folder}
+            );
+        } else {
+            result = tx.exec(
+                "SELECT (data #>> array[$2, $3, $4]) FROM data WHERE user_id = $1",
+                pqxx::params{user_id, path.type_folder, path.name_folder, path.key}
+            );
+        }
 
         if (!result.empty() && !result[0][0].is_null()) {
-            return result[0][0].as<std::string>();
+            const auto data = result[0][0].as<std::string>();
+
+            if (path.key.empty() || path.type_folder == "files") {
+                return data;
+            }
+
+            auto encrypted_data = Botan::base64_decode(data);
+
+            const std::string path_context = build_path_context(path);
+            const std::span<const unsigned char> enc_span(encrypted_data.data(), encrypted_data.size());
+
+            auto decrypted_data = Encryption::decrypt(enc_span, master_key, path_context);
+            return {decrypted_data.begin(), decrypted_data.end()};
         }
     } catch (const std::exception& e) {
         fmt::println(stderr, "Error in get_data: {}", e.what());
@@ -104,15 +132,22 @@ std::string Data_Manager::get_data(int user_id, const Data_Path& path) {
     return "";
 }
 
-bool Data_Manager::delete_data(int user_id, const Data_Path& path) {
+bool Data_Manager::delete_data(int user_id, const Data_Path& path) const {
     try {
         pqxx::work tx(*db_);
-        const std::vector<std::string> json_path = build_json_path(path);
+        pqxx::result result;
 
-        const pqxx::result result = tx.exec(
-            "UPDATE data SET data = data #- $2 WHERE user_id = $1 AND data #> $2 IS NOT NULL",
-            pqxx::params{user_id, json_path}
-        );
+        if (path.key.empty()) {
+            result = tx.exec(
+                "UPDATE data SET data = data #- array[$2, $3] WHERE user_id = $1 AND data #> array[$2, $3] IS NOT NULL",
+                pqxx::params{user_id, path.type_folder, path.name_folder}
+            );
+        } else {
+            result = tx.exec(
+                "UPDATE data SET data = data #- array[$2, $3, $4] WHERE user_id = $1 AND data #> array[$2, $3, $4] IS NOT NULL",
+                pqxx::params{user_id, path.type_folder, path.name_folder, path.key}
+            );
+        }
         tx.commit();
 
         return result.affected_rows() > 0;
@@ -122,28 +157,7 @@ bool Data_Manager::delete_data(int user_id, const Data_Path& path) {
     }
 }
 
-bool Data_Manager::update_data(int user_id, const Data_Path& path, const std::string& new_value) {
-    try {
-        const std::vector<std::string> json_path = build_json_path(path);
-        if (json_path.size() != 3) return false;
-
-        pqxx::work tx(*db_);
-
-        const pqxx::result result = tx.exec(
-            "UPDATE data SET data = jsonb_set(data, $2, $3::jsonb, false) "
-            "WHERE user_id = $1 AND data #> $2 IS NOT NULL",
-            pqxx::params{user_id, json_path, nlohmann::json(new_value).dump()}
-        );
-        tx.commit();
-
-        return result.affected_rows() > 0;
-    } catch (const std::exception& e) {
-        fmt::println(stderr, "Error in update_data: {}", e.what());
-        return false;
-    }
-}
-
-bool Data_Manager::append_file(int user_id, const Data_Path& data_struct, const std::string& raw_file_path) {
+bool Data_Manager::append_file(int user_id, const Data_Path& data_struct, const std::string& raw_file_path, std::span<const unsigned char> master_key) const {
     if (data_struct.type_folder.empty() || data_struct.name_folder.empty() || data_struct.key.empty()) return false;
 
     std::string clean_path_str = raw_file_path;
@@ -157,24 +171,30 @@ bool Data_Manager::append_file(int user_id, const Data_Path& data_struct, const 
     if (!file.is_open()) return false;
 
     const auto file_size = file.tellg();
+    if (file_size <= 0) return false;
     file.seekg(0, std::ios::beg);
 
     std::vector<char> buffer(file_size);
     if (!file.read(buffer.data(), file_size)) return false;
 
     const std::string file_id = generate_uuid_v4();
+    const std::string file_id_with_ext = file_id + file_path.extension().string();
 
     try {
         pqxx::work tx(*db_);
 
-        const auto* data_ptr = reinterpret_cast<const std::byte*>(buffer.data());
+        const std::string path_context = build_path_context(data_struct);
+        std::span<const unsigned char> file_span(reinterpret_cast<const unsigned char*>(buffer.data()), buffer.size());
+
+        auto encrypted_data = Encryption::encrypt(file_span, master_key, path_context);
+        const auto* data_ptr = reinterpret_cast<const std::byte*>(encrypted_data.data());
 
         tx.exec(
             "INSERT INTO file_storage (file_id, user_id, content) VALUES ($1::uuid, $2, $3)",
-            pqxx::params{file_id, user_id, pqxx::bytes(data_ptr, data_ptr + buffer.size())}
+            pqxx::params{file_id, user_id, pqxx::bytes(data_ptr, data_ptr + encrypted_data.size())}
         );
 
-        const auto new_file_entry = nlohmann::json::object({ {data_struct.key, file_id} });
+        const auto new_file_entry = nlohmann::json::object({ {data_struct.key, file_id_with_ext} });
         const auto result = tx.exec(
             "UPDATE data SET data = jsonb_set(data, array[$2, $3], "
             "COALESCE(data->$2->$3, '{}'::jsonb) || $4::jsonb, true) WHERE user_id = $1",
