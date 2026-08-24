@@ -3,6 +3,7 @@
 #include <iostream>
 #include <string>
 #include <format>
+#include <print>
 
 static void create_tables_if_not_exists(const std::shared_ptr<pqxx::connection>& connection) {
     pqxx::work tx(*connection);
@@ -60,11 +61,11 @@ DB_Manager::DB_Manager() {
 
         if (connection_->is_open()) {
             connection_->set_client_encoding("UTF8");
-            std::cout << "Successfully connected to the database: " << connection_->dbname() << "\n";
+            std::println("Successfully connected to {} on the host {} 🟢", connection_->dbname(), host);
             create_tables_if_not_exists(connection_);
         }
     } catch (const std::exception& e) {
-        std::cerr << "Database initialization failed: " << e.what() << "\n";
+        std::cerr << "Database initialization failed: " << e.what() << "🔴\n";
         throw;
     }
 }

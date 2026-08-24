@@ -100,30 +100,32 @@ std::string Data_Manager::get_data(int user_id, const Data_Path& path, const std
 
         if (path.key.empty()) {
             result = tx.exec(
-                "SELECT (data #>> array[$2, $3]) FROM data WHERE user_id = $1",
+                "SELECT (data #> array[$2, $3])::text FROM data WHERE user_id = $1",
                 pqxx::params{user_id, path.type_folder, path.name_folder}
             );
+
+            if (!result.empty() && !result[0][0].is_null()) {
+                return result[0][0].as<std::string>();
+            }
+
         } else {
             result = tx.exec(
                 "SELECT (data #>> array[$2, $3, $4]) FROM data WHERE user_id = $1",
                 pqxx::params{user_id, path.type_folder, path.name_folder, path.key}
             );
-        }
 
-        if (!result.empty() && !result[0][0].is_null()) {
-            const auto data = result[0][0].as<std::string>();
+            if (!result.empty() && !result[0][0].is_null()) {
+                const auto data = result[0][0].as<std::string>();
 
-            if (path.key.empty() || path.type_folder == "files") {
-                return data;
+                if (path.type_folder == "files") return data;
+
+                auto encrypted_data = Botan::base64_decode(data);
+                const std::string path_context = build_path_context(path);
+                const std::span<const unsigned char> enc_span(encrypted_data.data(), encrypted_data.size());
+
+                auto decrypted_data = Encryption::decrypt(enc_span, master_key, path_context);
+                return {decrypted_data.begin(), decrypted_data.end()};
             }
-
-            auto encrypted_data = Botan::base64_decode(data);
-
-            const std::string path_context = build_path_context(path);
-            const std::span<const unsigned char> enc_span(encrypted_data.data(), encrypted_data.size());
-
-            auto decrypted_data = Encryption::decrypt(enc_span, master_key, path_context);
-            return {decrypted_data.begin(), decrypted_data.end()};
         }
     } catch (const std::exception& e) {
         fmt::println(stderr, "Error in get_data: {}", e.what());

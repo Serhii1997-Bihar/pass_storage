@@ -61,7 +61,8 @@ The project follows a service-oriented architecture using standard smart pointer
 | **`saver.cpp`**                  | **Export Manager (`Save_Manager`)**: Dumps requested files/data into a temporary directory, compresses them into an encrypted `.7z` archive with hidden headers (`-mhe=on`) via **7-Zip**, and returns the random archive password. |
 | **`user.cpp`**                   | **User Profile Manager (`User_Manager`)**: Provides functions to retrieve and update user account details (such as *email* or *password*) in the database.                                                                          |
 | **`main.cpp`**                   | **Entry Point (CLI Orchestrator)**: Ties all services together into an interactive command-line interface, managing the authentication loop and user menu routing.                                                                  |
-| **`hashing.cpp / cryption.cpp`** | **Crypto**: These files are the main helpers to hash and crypt data to provide security of user.                                                                                                                                    |
+| **`hashing.cpp / cryption.cpp`** | **Files**: These files are the main helpers to hash and crypt data to provide security of user.                                                                                                                                     |
+| **`menu_options.cpp`**           | **File**: This file helps to determine the requests from users and run significant function.                                                                                                                                        |
 
 ---
 

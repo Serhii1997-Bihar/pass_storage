@@ -82,7 +82,7 @@ std::string Otp_Manager::generate_otp() {
     return std::to_string(dist(gen));
 }
 
-bool Otp_Manager::update_otp(int user_id) {
+bool Otp_Manager::update_otp(int user_id) const {
     pqxx::work tx(*db_);
     std::string new_otp = generate_otp();
 

@@ -88,12 +88,7 @@ std::string Save_Manager::save_data(
         }
 
         if (!path.key.empty()) {
-            const std::string context = std::format("{}/{}/{}", path.type_folder, path.name_folder, path.key);
-            const auto decoded = Botan::base64_decode(data);
-            const std::span<const unsigned char> enc_span(decoded.data(), decoded.size());
-            const auto decrypted = Encryption::decrypt(enc_span, master_key, context);
-
-            out_stream.write(reinterpret_cast<const char*>(decrypted.data()), decrypted.size());
+            out_stream.write(data.data(), data.size());
         } else {
             const auto json_data = nlohmann::json::parse(data, nullptr, false);
             if (!json_data.is_discarded() && json_data.is_object()) {

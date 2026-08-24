@@ -8,7 +8,7 @@ public:
     explicit Otp_Manager(std::shared_ptr<pqxx::connection> db_connection);
 
     [[nodiscard]] int get_otp(int user_id) const;
-    [[nodiscard]] bool update_otp(int user_id);
+    [[nodiscard]] bool update_otp(int user_id) const;
 
 private:
     std::shared_ptr<pqxx::connection> db_;
