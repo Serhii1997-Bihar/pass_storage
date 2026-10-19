@@ -1,10 +1,9 @@
 ﻿#include "pass-storage/services/otp.hpp"
 #include "pass-storage/helpers/load_env.hpp"
 #include <random>
-#include <fmt/core.h>
 #include <fmt/ostream.h>
-#include <iostream>
 #include <curl/curl.h>
+#include <thread>
 
 Otp_Manager::Otp_Manager(std::shared_ptr<pqxx::connection> db_connection)
     : db_(std::move(db_connection)) {}
@@ -86,19 +85,18 @@ bool Otp_Manager::update_otp(int user_id) const {
     pqxx::work tx(*db_);
     std::string new_otp = generate_otp();
 
-    pqxx::result result = tx.exec(
+    const pqxx::result result = tx.exec(
         "UPDATE users SET otp_code = $1 WHERE id = $2 RETURNING email",
         pqxx::params{new_otp, user_id}
     );
     tx.commit();
 
     if (!result.empty()) {
-        auto user_email = result[0][0].as<std::string>();
+        if (!send_otp(result[0][0].as<std::string>(), new_otp)) {
+            fmt::println("Message didn't send to user");
+        }
 
-        if (send_otp(user_email, new_otp)) return true;
-
-        fmt::println(stderr, "Sending OTP failed");
-        return false;
+        return true;
     }
 
     fmt::println("Updating OTP is failed.");

@@ -3,7 +3,7 @@
 #include <iostream>
 #include <string>
 #include <format>
-#include <print>
+#include <fmt/ostream.h>
 
 static void create_tables_if_not_exists(const std::shared_ptr<pqxx::connection>& connection) {
     pqxx::work tx(*connection);
@@ -46,7 +46,9 @@ static void create_tables_if_not_exists(const std::shared_ptr<pqxx::connection>&
     tx.commit();
 }
 
-DB_Manager::DB_Manager() {
+DB_Manager::DB_Manager(std::chrono::seconds timeout)
+    : timeout_(timeout),
+      last_activity_(std::chrono::steady_clock::now()) {
     try {
         load_env();
 
@@ -61,15 +63,42 @@ DB_Manager::DB_Manager() {
 
         if (connection_->is_open()) {
             connection_->set_client_encoding("UTF8");
-            std::println("Successfully connected to {} on the host {} 🟢", connection_->dbname(), host);
+            fmt::println("Successfully connected to {} on the host {} 🟢", connection_->dbname(), host);
             create_tables_if_not_exists(connection_);
         }
+
+        monitor_thread_ = std::jthread([this](std::stop_token stop_token) {
+            monitor_loop(stop_token);
+        });
     } catch (const std::exception& e) {
         std::cerr << "Database initialization failed: " << e.what() << "🔴\n";
         throw;
     }
 }
 
+DB_Manager::~DB_Manager() {
+    if (monitor_thread_.joinable()) {
+        monitor_thread_.request_stop();
+    }
+}
+
 std::shared_ptr<pqxx::connection> DB_Manager::get_connection() const {
+    update_activity();
     return connection_;
+}
+
+void DB_Manager::update_activity() const noexcept {
+    last_activity_.store(std::chrono::steady_clock::now());
+}
+
+void DB_Manager::monitor_loop(std::stop_token stop_token) const {
+    while (!stop_token.stop_requested()) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+
+        auto now = std::chrono::steady_clock::now();
+        if ((now - last_activity_.load()) >= timeout_) {
+            fmt::println("\n[Security] No activity for 2 minutes. Auto-closing pass_storage... 🔴");
+            std::exit(0);
+        }
+    }
 }

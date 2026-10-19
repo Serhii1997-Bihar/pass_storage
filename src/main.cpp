@@ -60,10 +60,10 @@ int main() {
             }
         }
 
-        const std::string username = user_manager.get_username(user_id.value());
-        fmt::println("Welcome, {}! What action do you want to do?", username);
-
         if (user_id.has_value() && is_auth) {
+            const std::string username = user_manager.get_username(user_id.value());
+            fmt::println("Welcome, {}! What action do you want to do?", username);
+
             bool is_running = true;
 
             while (is_running) {

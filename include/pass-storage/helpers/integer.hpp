@@ -19,7 +19,7 @@ inline std::string generate_password() {
     };
 
     std::string password;
-    password.reserve(12);
+    password.reserve(30);
 
     password += get_random_char(lower);
     password += get_random_char(upper);
